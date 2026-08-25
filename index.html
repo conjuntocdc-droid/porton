@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Control de portón</title>
+<style>
+  :root{
+    --panel: #ffffff;
+    --panel-2: #f4fffd;
+    --brass: #0d9488;
+    --brass-light: #2dd4bf;
+    --accent: #fb923c;
+    --accent-light: #fdba74;
+    --ok: #16a34a;
+    --err: #e11d48;
+    --text: #114240;
+    --text-dim: #5b8481;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    height:100%;
+    margin:0;
+    background: linear-gradient(160deg, #cffafe 0%, #ecfeff 35%, #fff7ed 75%, #ffedd5 100%);
+    font-family: 'Georgia', 'Iowan Old Style', serif;
+    color:var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100dvh;
+    padding:24px;
+  }
+  .plate{
+    width:100%;
+    max-width:360px;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border-radius:28px;
+    padding:32px 26px 28px;
+    box-shadow:
+      0 30px 60px -20px rgba(13,148,136,0.25),
+      inset 0 1px 0 rgba(255,255,255,0.7),
+      inset 0 0 0 1px rgba(13,148,136,0.08);
+    position:relative;
+  }
+  .screw{ position:absolute; width:8px;height:8px; border-radius:50%;
+    background: radial-gradient(circle at 35% 35%, #99f6e4, #5eead4);
+    box-shadow: inset 0 0 2px rgba(13,148,136,0.3); }
+  .screw.tl{top:14px;left:14px;} .screw.tr{top:14px;right:14px;}
+  .screw.bl{bottom:14px;left:14px;} .screw.br{bottom:14px;right:14px;}
+
+  .eyebrow{ text-transform:uppercase; letter-spacing:.22em; font-size:11px;
+    color:var(--text-dim); text-align:center; margin-bottom:6px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  h1{ text-align:center; font-size:22px; font-weight:400; margin:0 0 26px;
+    color:var(--brass); }
+
+  #loginView input{ width:100%; padding:13px 14px; margin-bottom:12px;
+    border-radius:10px; border:1px solid #b2e5e0; background:#f4fffd;
+    color:var(--text); font-size:15px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  #loginView input:focus{ outline:none; border-color:var(--brass); }
+  #loginView button{ width:100%; padding:13px; border:none; border-radius:10px;
+    background: linear-gradient(180deg, var(--brass-light), var(--brass));
+    color:#ffffff; font-weight:700; font-size:14px; letter-spacing:.05em;
+    text-transform:uppercase; cursor:pointer;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  #loginView button:disabled{ opacity:.6; }
+
+  .fila-botones{ display:flex; gap:12px; margin: 6px 0 18px; }
+  .btn-accion{ flex:1; padding:16px 8px; border:none; border-radius:14px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight:700; font-size:13px; letter-spacing:.03em; cursor:pointer;
+    text-transform:uppercase; }
+  .btn-foto{ background: linear-gradient(180deg, #5eead4, #0d9488); color:#ffffff; }
+  .btn-abrir{ background: linear-gradient(180deg, var(--accent-light), var(--accent)); color:#ffffff; }
+  .btn-accion:disabled{ filter: grayscale(0.4) brightness(1.05) opacity(0.55); cursor:default; }
+
+  .foto-wrap{ margin: 6px 0 14px; text-align:center; }
+  .foto-wrap img{ max-width:100%; border-radius:14px; border:1px solid #b2e5e0; }
+  .hidden{ display:none !important; }
+
+  .status{ text-align:center; min-height:20px; font-size:13px; color:var(--text-dim);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin-bottom:4px; }
+  .status.ok{ color: var(--ok); } .status.err{ color: var(--err); }
+
+  .foot{ margin-top:20px; text-align:center; font-size:11px; color:var(--text-dim);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .foot button{ background:none;border:none;color:var(--brass); text-decoration:underline;
+    cursor:pointer; font-size:11px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+</style>
+</head>
+<body>
+
+<div class="plate">
+  <div class="screw tl"></div><div class="screw tr"></div>
+  <div class="screw bl"></div><div class="screw br"></div>
+
+  <div class="eyebrow">Controlador principal</div>
+  <h1>Control de portón</h1>
+
+  <div id="loginView">
+    <input type="email" id="email" placeholder="Correo" autocomplete="username">
+    <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password">
+    <button id="btnLogin" onclick="iniciarSesion()">Iniciar sesión</button>
+    <div class="status" id="loginStatus"></div>
+  </div>
+
+  <div id="appView" class="hidden">
+    <div class="fila-botones">
+      <button class="btn-accion btn-foto" id="btnFoto" onclick="tomarFoto()">Tomar foto</button>
+      <button class="btn-accion btn-abrir" id="btnAbrir" onclick="abrirPuertaAccion()" disabled>Abrir puerta</button>
+    </div>
+
+    <div class="status" id="statusFoto">Toca "Tomar foto" para ver el portón</div>
+
+    <div class="foto-wrap hidden" id="fotoWrap">
+      <img id="imgFoto" src="" alt="Foto del portón">
+    </div>
+
+    <div class="status" id="statusAbrir"></div>
+  </div>
+
+  <div class="foot">
+    <span id="footText">Acceso remoto</span>
+    <div id="logoutWrap" class="hidden" style="margin-top:8px;">
+      <button onclick="cerrarSesion()">Cerrar sesión</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+  // ---------- CONFIGURACION ----------
+  const firebaseConfig = {
+      apiKey: "TU_API_KEY",
+      authDomain: "TU_PROYECTO.firebaseapp.com",
+      databaseURL: "https://TU_PROYECTO-default-rtdb.firebaseio.com",
+      projectId: "TU_PROYECTO",
+      storageBucket: "TU_PROYECTO.firebasestorage.app",
+      messagingSenderId: "TU_SENDER_ID",
+      appId: "TU_APP_ID"
+  };
+
+  const TOKEN_SECRETO = "TU_TOKEN_SECRETO"; // igual al de las reglas de Firebase y al main.py
+  const VENTANA_ABRIR_MS = 25000;           // 25s habilitado tras mostrar la foto
+  const TIMEOUT_FOTO_MS = 30000;            // deja de esperar la foto tras 30s
+  const INTERVALO_POLL_FOTO_MS = 2000;
+  // ------------------------------------
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  const loginView = document.getElementById('loginView');
+  const appView = document.getElementById('appView');
+  const logoutWrap = document.getElementById('logoutWrap');
+  const loginStatus = document.getElementById('loginStatus');
+
+  const btnFoto = document.getElementById('btnFoto');
+  const btnAbrir = document.getElementById('btnAbrir');
+  const statusFoto = document.getElementById('statusFoto');
+  const statusAbrir = document.getElementById('statusAbrir');
+  const fotoWrap = document.getElementById('fotoWrap');
+  const imgFoto = document.getElementById('imgFoto');
+
+  let ventanaAbrirTimeout = null;
+  let pollFotoInterval = null;
+  let accionSolicitadaActual = null;
+
+  function claveUsuario(email){
+    return email.replace(/\./g, '_').replace(/@/g, '_at_');
+  }
+
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+  auth.onAuthStateChanged((user) => {
+    if (user) {
+      loginView.classList.add('hidden');
+      appView.classList.remove('hidden');
+      logoutWrap.classList.remove('hidden');
+    } else {
+      loginView.classList.remove('hidden');
+      appView.classList.add('hidden');
+      logoutWrap.classList.add('hidden');
+    }
+  });
+
+  async function iniciarSesion(){
+    const email = document.getElementById('email').value.trim();
+    const pass = document.getElementById('password').value;
+    const btnLogin = document.getElementById('btnLogin');
+
+    if (!email || !pass) {
+      loginStatus.className = 'status err';
+      loginStatus.textContent = 'Ingresa correo y contraseña';
+      return;
+    }
+    btnLogin.disabled = true;
+    loginStatus.className = 'status';
+    loginStatus.textContent = 'Verificando...';
+    try {
+      await auth.signInWithEmailAndPassword(email, pass);
+      loginStatus.textContent = '';
+    } catch (e) {
+      loginStatus.className = 'status err';
+      loginStatus.textContent = 'Correo o contraseña incorrectos';
+    } finally {
+      btnLogin.disabled = false;
+    }
+  }
+
+  function cerrarSesion(){ auth.signOut(); }
+
+  async function tomarFoto(){
+    const user = auth.currentUser;
+    if (!user) return;
+
+    btnFoto.disabled = true;
+    btnAbrir.disabled = true;
+    fotoWrap.classList.add('hidden');
+    statusAbrir.textContent = '';
+    statusFoto.className = 'status';
+    statusFoto.textContent = 'Solicitando foto al portón...';
+
+    if (pollFotoInterval) clearInterval(pollFotoInterval);
+    if (ventanaAbrirTimeout) clearTimeout(ventanaAbrirTimeout);
+
+    const solicitadoEn = Date.now();
+    const clave = claveUsuario(user.email);
+
+    try {
+      await db.ref(TOKEN_SECRETO + '/FotoRequest/' + clave).set({
+        usuario: user.email,
+        solicitado_en: solicitadoEn
+      });
+    } catch (e) {
+      statusFoto.className = 'status err';
+      statusFoto.textContent = 'Error al solicitar la foto';
+      btnFoto.disabled = false;
+      return;
+    }
+
+    let transcurrido = 0;
+    pollFotoInterval = setInterval(async () => {
+      transcurrido += INTERVALO_POLL_FOTO_MS;
+      try {
+        // Endpoint liviano: solo metadatos (timestamp/rechazo/estado) de ESTE
+        // usuario, SIN el base64 -- evita descargar la imagen anterior
+        // completa en cada intento de polling mientras se espera la nueva.
+        const snapMeta = await db.ref(TOKEN_SECRETO + '/Fotos/' + clave + '/meta').once('value');
+        const meta = snapMeta.val() || {};
+        const ts = meta.fotoTimestamp;
+        const rechazadaEn = meta.rechazada_en;
+
+        if (rechazadaEn && rechazadaEn > solicitadoEn && (!ts || rechazadaEn > ts)) {
+          clearInterval(pollFotoInterval);
+          statusFoto.className = 'status err';
+          statusFoto.textContent = 'Alcanzaste el límite mensual de fotos. Contacta a la administración.';
+          btnFoto.disabled = false;
+          return;
+        }
+
+        if (ts && ts > solicitadoEn) {
+          clearInterval(pollFotoInterval);
+
+          // Endpoint distinto: recien aqui, y solo una vez, se trae el base64 completo
+          const snapB64 = await db.ref(TOKEN_SECRETO + '/Fotos/' + clave + '/base64').once('value');
+          const b64 = snapB64.val();
+
+          // El estado del portón queda "congelado" junto con la foto: se usa
+          // para calcular qué acción tendría sentido pedir, según lo que el
+          // usuario está viendo en pantalla en este momento.
+          accionSolicitadaActual = (meta.estadoEnFoto === 'abierta') ? 'cerrar' : 'abrir';
+
+          imgFoto.src = 'data:image/jpeg;base64,' + b64;
+          fotoWrap.classList.remove('hidden');
+          statusFoto.className = 'status ok';
+          statusFoto.textContent = 'Foto actualizada';
+          btnFoto.disabled = false;
+
+          btnAbrir.disabled = false;
+          btnAbrir.textContent = (accionSolicitadaActual === 'abrir') ? 'Abrir puerta' : 'Cerrar puerta';
+          statusAbrir.className = 'status ok';
+          statusAbrir.textContent = 'Puedes ' + (accionSolicitadaActual === 'abrir' ? 'abrir' : 'cerrar') + ' la puerta (25 segundos)';
+
+          ventanaAbrirTimeout = setTimeout(() => {
+            btnAbrir.disabled = true;
+            btnAbrir.textContent = 'Abrir puerta';
+            statusAbrir.className = 'status';
+            statusAbrir.textContent = 'Tiempo para abrir expirado';
+          }, VENTANA_ABRIR_MS);
+
+        } else if (transcurrido >= TIMEOUT_FOTO_MS) {
+          clearInterval(pollFotoInterval);
+          statusFoto.className = 'status err';
+          statusFoto.textContent = 'No se recibió la foto a tiempo';
+          btnFoto.disabled = false;
+        }
+      } catch (e) {
+        clearInterval(pollFotoInterval);
+        statusFoto.className = 'status err';
+        statusFoto.textContent = 'Error al consultar la foto';
+        btnFoto.disabled = false;
+      }
+    }, INTERVALO_POLL_FOTO_MS);
+  }
+
+  async function abrirPuertaAccion(){
+    const user = auth.currentUser;
+    if (!user || btnAbrir.disabled) return;
+
+    btnAbrir.disabled = true;
+    statusAbrir.className = 'status';
+    statusAbrir.textContent = 'Enviando acción...';
+
+    const solicitadoEn = Date.now();
+
+    try {
+      await db.ref(TOKEN_SECRETO + '/SolicitudAccionPuerta').set({
+        usuario: user.email,
+        solicitado_en: solicitadoEn,
+        accionSolicitada: accionSolicitadaActual
+      });
+      statusAbrir.textContent = 'Esperando confirmación del portón...';
+      escucharConfirmacionAccion(solicitadoEn);
+    } catch (e) {
+      statusAbrir.className = 'status err';
+      statusAbrir.textContent = 'Error al enviar la acción';
+    }
+
+    if (ventanaAbrirTimeout) clearTimeout(ventanaAbrirTimeout);
+  }
+
+  function escucharConfirmacionAccion(solicitadoEn){
+    const ref = db.ref(TOKEN_SECRETO + '/UltimaAccionPuerta');
+    const cb = (snap) => {
+      const val = snap.val();
+      // Solo nos interesa la confirmacion de ESTA solicitud puntual, no una anterior
+      if (val && val.solicitado_en === solicitadoEn) {
+        if (val.resultado === 'ok') {
+          statusAbrir.className = 'status ok';
+          statusAbrir.textContent = 'Listo: se ' + (val.accionAplicada === 'abrir' ? 'abrió' : 'cerró') + ' el portón';
+        } else if (val.resultado === 'bloqueado_seguridad') {
+          statusAbrir.className = 'status err';
+          statusAbrir.textContent = 'No se accionó: hubo otra acción hace muy poco. Espera unos segundos.';
+        } else if (val.resultado === 'vencido') {
+          statusAbrir.className = 'status err';
+          statusAbrir.textContent = 'La solicitud tardó demasiado y fue descartada. Intenta de nuevo.';
+        }
+        ref.off('value', cb);
+      }
+    };
+    ref.on('value', cb);
+
+    // Si en 15s no llega respuesta (ESP32 sin conexion, etc.), dejamos de escuchar
+    setTimeout(() => {
+      ref.off('value', cb);
+    }, 15000);
+  }
+</script>
+
+</body>
+</html>
