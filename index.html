@@ -82,6 +82,36 @@
   .foto-wrap img{ max-width:100%; border-radius:14px; border:1px solid #b2e5e0; }
   .hidden{ display:none !important; }
 
+  .estado-card{ background:#f4fffd; border:1px solid #b2e5e0; border-radius:14px;
+    padding:14px 16px; margin-bottom:16px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .estado-header{ display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:8px; }
+  .estado-titulo{ font-size:11px; text-transform:uppercase; letter-spacing:.1em;
+    color:var(--text-dim); font-weight:700; }
+  .btn-refrescar{ display:flex; align-items:center; gap:5px; background:none; border:none;
+    color:var(--brass); font-size:12px; font-weight:700; cursor:pointer; padding:4px 6px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .btn-refrescar:disabled{ opacity:.5; cursor:default; }
+  .icono-refrescar{ display:inline-block; width:13px; height:13px; }
+  .icono-refrescar.girando{ animation: girar 0.8s linear infinite; }
+  @keyframes girar{ from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+
+  .estado-fila{ display:flex; align-items:baseline; justify-content:space-between;
+    font-size:14px; margin-bottom:4px; }
+  .estado-fila .etiqueta{ color:var(--text-dim); font-size:12px; }
+  .estado-fila .valor{ font-weight:700; }
+  .pastilla{ display:inline-block; padding:2px 10px; border-radius:20px; font-size:12px;
+    font-weight:700; }
+  .pastilla.abierta{ background:#ffe4d6; color:#c2410c; }
+  .pastilla.cerrada{ background:#dcfce7; color:#15803d; }
+  .pastilla.desconocido{ background:#e5e7eb; color:#4b5563; }
+
+  .estado-desde{ font-size:12px; color:var(--text-dim); text-align:right; margin-top:-2px; }
+  .estado-heartbeat{ font-size:11px; color:var(--text-dim); margin-top:8px;
+    padding-top:8px; border-top:1px dashed #b2e5e0; }
+  .estado-heartbeat.viejo{ color:var(--err); font-weight:700; }
+
   .status{ text-align:center; min-height:20px; font-size:13px; color:var(--text-dim);
     font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin-bottom:4px; }
   .status.ok{ color: var(--ok); } .status.err{ color: var(--err); }
@@ -109,6 +139,21 @@
   </div>
 
   <div id="appView" class="hidden">
+    <div class="estado-card">
+      <div class="estado-header">
+        <span class="pastilla desconocido" id="pastillaEstado">Sin datos</span>
+        <button class="btn-refrescar" id="btnRefrescar" onclick="actualizarEstado()">
+          <svg class="icono-refrescar" id="iconoRefrescar" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 11A8 8 0 1 0 18.5 16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+            <path d="M20 5V11H14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+          Actualizar
+        </button>
+      </div>
+      <div class="estado-desde" id="estadoDesde">&nbsp;</div>
+      <div class="estado-heartbeat" id="estadoHeartbeat">Presiona "Actualizar" para consultar el estado</div>
+    </div>
+
     <div class="fila-botones">
       <button class="btn-accion btn-foto" id="btnFoto" onclick="tomarFoto()">Tomar foto</button>
       <button class="btn-accion btn-abrir" id="btnAbrir" onclick="abrirPuertaAccion()" disabled>Abrir puerta</button>
@@ -169,9 +214,92 @@
   const fotoWrap = document.getElementById('fotoWrap');
   const imgFoto = document.getElementById('imgFoto');
 
+  const btnRefrescar = document.getElementById('btnRefrescar');
+  const iconoRefrescar = document.getElementById('iconoRefrescar');
+  const pastillaEstado = document.getElementById('pastillaEstado');
+  const estadoDesde = document.getElementById('estadoDesde');
+  const estadoHeartbeat = document.getElementById('estadoHeartbeat');
+
+  const HEARTBEAT_VIEJO_MS = 60000; // si el ultimo heartbeat tiene mas de 60s, se marca como posible caida
+
   let ventanaAbrirTimeout = null;
   let pollFotoInterval = null;
   let accionSolicitadaActual = null;
+
+  // ---------- Estado en tiempo real (heartbeat + EstadoPuerta) ----------
+  // Lectura puntual (.once), no un listener permanente: se consulta solo al
+  // cargar la pagina (tras iniciar sesion) y cuando el usuario presiona
+  // "Actualizar" -- asi alguien con la pagina abierta en el celular desde
+  // hace rato, con datos en cache, puede refrescar sin necesidad de tomar
+  // una foto nueva.
+  function formatoRelativo(ms){
+    if (!ms) return null;
+    const segs = Math.round((Date.now() - ms) / 1000);
+    if (segs < 5) return 'justo ahora';
+    if (segs < 60) return 'hace ' + segs + ' s';
+    const mins = Math.round(segs / 60);
+    if (mins < 60) return 'hace ' + mins + ' min';
+    const horas = Math.round(mins / 60);
+    if (horas < 24) return 'hace ' + horas + ' h';
+    const dias = Math.round(horas / 24);
+    return 'hace ' + dias + ' d';
+  }
+
+  async function actualizarEstado(){
+    const user = auth.currentUser;
+    if (!user) return;
+
+    btnRefrescar.disabled = true;
+    iconoRefrescar.classList.add('girando');
+
+    try {
+      // Se consultan solo estos dos nodos livianos (heartbeat + EstadoPuerta),
+      // nunca el nodo raiz completo: este ultimo tambien contiene Fotos/<usuario>,
+      // con el base64 de la ultima foto de cada residente -- exactamente el
+      // payload pesado que la separacion meta/base64 busca evitar descargar
+      // en consultas que no lo necesitan.
+      const [snapHeartbeat, snapHeartbeatFecha, snapEstado] = await Promise.all([
+        db.ref(TOKEN_SECRETO + '/heartbeat').once('value'),
+        db.ref(TOKEN_SECRETO + '/heartbeatFecha').once('value'),
+        db.ref(TOKEN_SECRETO + '/EstadoPuerta').once('value'),
+      ]);
+      const heartbeat = snapHeartbeat.val();
+      const heartbeatFecha = snapHeartbeatFecha.val();
+      const estadoPuerta = snapEstado.val() || {};
+
+      if (estadoPuerta.estado === 'abierta' || estadoPuerta.estado === 'cerrada'){
+        pastillaEstado.textContent = 'Estado: ' + (estadoPuerta.estado === 'abierta' ? 'Abierto' : 'Cerrado');
+        pastillaEstado.className = 'pastilla ' + estadoPuerta.estado;
+      } else {
+        pastillaEstado.textContent = 'Sin datos';
+        pastillaEstado.className = 'pastilla desconocido';
+      }
+
+      if (estadoPuerta.estadoTimestamp){
+        const rel = formatoRelativo(estadoPuerta.estadoTimestamp);
+        estadoDesde.textContent = 'Desde ' + (estadoPuerta.estadoFecha || '') + (rel ? ' (' + rel + ')' : '');
+      } else {
+        estadoDesde.textContent = ' ';
+      }
+
+      if (heartbeat){
+        const rel = formatoRelativo(heartbeat);
+        const viejo = (Date.now() - heartbeat) > HEARTBEAT_VIEJO_MS;
+        estadoHeartbeat.textContent = 'Última sincronización de datos del portón a internet: ' + (heartbeatFecha || '') +
+          (rel ? ' (' + rel + ')' : '') + (viejo ? ' — posible pérdida de conexión' : '');
+        estadoHeartbeat.className = 'estado-heartbeat' + (viejo ? ' viejo' : '');
+      } else {
+        estadoHeartbeat.textContent = 'Sin datos de actividad del ESP32';
+        estadoHeartbeat.className = 'estado-heartbeat';
+      }
+    } catch (e) {
+      estadoHeartbeat.textContent = 'Error al consultar el estado';
+      estadoHeartbeat.className = 'estado-heartbeat viejo';
+    } finally {
+      btnRefrescar.disabled = false;
+      iconoRefrescar.classList.remove('girando');
+    }
+  }
 
   function claveUsuario(email){
     return email.replace(/\./g, '_').replace(/@/g, '_at_');
@@ -184,6 +312,7 @@
       loginView.classList.add('hidden');
       appView.classList.remove('hidden');
       logoutWrap.classList.remove('hidden');
+      actualizarEstado(); // carga inicial: al iniciar sesion o al recargar la pagina con sesion ya guardada
     } else {
       loginView.classList.remove('hidden');
       appView.classList.add('hidden');
