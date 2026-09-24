@@ -285,7 +285,7 @@
       if (heartbeat){
         const rel = formatoRelativo(heartbeat);
         const viejo = (Date.now() - heartbeat) > HEARTBEAT_VIEJO_MS;
-        estadoHeartbeat.textContent = 'Última sincronización de datos del portón a internet: ' + (heartbeatFecha || '') +
+        estadoHeartbeat.textContent = 'Última sincronización : ' + (heartbeatFecha || '') +
           (rel ? ' (' + rel + ')' : '') + (viejo ? ' — posible pérdida de conexión' : '');
         estadoHeartbeat.className = 'estado-heartbeat' + (viejo ? ' viejo' : '');
       } else {
